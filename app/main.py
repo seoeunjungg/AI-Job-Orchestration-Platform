@@ -7,8 +7,10 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException
 
 from app.db import DB_PATH, init_db
+from app.events import record_job_event
 from app.models import STATUS_QUEUED
 from app.schemas import (
+    JobEventResponse,
     JobCreateRequest,
     JobCreateResponse,
     JobDetailResponse,
@@ -71,6 +73,7 @@ def create_job(job: JobCreateRequest):
     db.commit()
     job_id = cursor.lastrowid
     db.close()
+    record_job_event(job_id, "job_created", "Job was queued")
 
     return {
         "job_id": job_id,
@@ -225,6 +228,45 @@ def list_workers():
         )
 
     return workers
+
+
+@app.get("/jobs/{job_id}/events", response_model=list[JobEventResponse])
+def get_job_events(job_id: int):
+    db = sqlite3.connect(DB_PATH)
+    job = db.execute(
+        """
+        SELECT id
+        FROM jobs
+        WHERE id = ?
+        """,
+        (job_id,),
+    ).fetchone()
+
+    if job is None:
+        db.close()
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    rows = db.execute(
+        """
+        SELECT id, job_id, event_type, message, created_at
+        FROM job_events
+        WHERE job_id = ?
+        ORDER BY id ASC
+        """,
+        (job_id,),
+    ).fetchall()
+    db.close()
+
+    return [
+        {
+            "event_id": row[0],
+            "job_id": row[1],
+            "event_type": row[2],
+            "message": row[3],
+            "created_at": row[4],
+        }
+        for row in rows
+    ]
 
 
 def count_status(rows, status: str):

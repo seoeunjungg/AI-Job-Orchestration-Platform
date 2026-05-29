@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime, timezone
 
 from app.db import DB_PATH
+from app.events import record_job_event
 from app.models import STATUS_FAILED, STATUS_QUEUED, STATUS_RUNNING, STATUS_SUCCEEDED
 from worker.handlers import HANDLERS
 
@@ -88,6 +89,7 @@ def mark_running(job_id: int, attempts: int):
     )
     db.commit()
     db.close()
+    record_job_event(job_id, "job_started", f"Worker {WORKER_ID} started attempt {attempts}")
 
 
 def mark_retry(job_id: int, error: str):
@@ -107,6 +109,7 @@ def mark_retry(job_id: int, error: str):
     )
     db.commit()
     db.close()
+    record_job_event(job_id, "job_retrying", error)
 
 
 def mark_succeeded(job_id: int, result):
@@ -128,6 +131,7 @@ def mark_succeeded(job_id: int, result):
     )
     db.commit()
     db.close()
+    record_job_event(job_id, "job_succeeded", "Job completed successfully")
 
 
 def mark_failed(job_id: int, error: str):
@@ -148,6 +152,7 @@ def mark_failed(job_id: int, error: str):
     )
     db.commit()
     db.close()
+    record_job_event(job_id, "job_failed", error)
 
 
 def run_job(row):

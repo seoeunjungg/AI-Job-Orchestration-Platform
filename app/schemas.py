@@ -65,3 +65,11 @@ class WorkerHealthResponse(BaseModel):
     last_seen_at: str
     seconds_since_last_seen: float
     healthy: bool
+
+
+class JobEventResponse(BaseModel):
+    event_id: int
+    job_id: int
+    event_type: str
+    message: str
+    created_at: str

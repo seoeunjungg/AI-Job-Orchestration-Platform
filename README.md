@@ -20,6 +20,7 @@ The current version focuses on the orchestration core:
 - Runtime timing with `started_at`, `finished_at`, and `duration_seconds`
 - Reliability metrics endpoint
 - Worker heartbeat monitoring
+- Per-job event logs
 - Swagger docs at `/docs`
 - Supported v0 job types: `echo`, `sleep`, `fail_once`
 
@@ -151,6 +152,40 @@ Example response:
 ```
 
 Workers update their heartbeat while idle and while processing jobs. The API marks a worker unhealthy if it has not been seen recently.
+
+### Job Events
+
+```text
+GET /jobs/{job_id}/events
+```
+
+Example response for a job that retries once:
+
+```json
+[
+  {
+    "event_id": 1,
+    "job_id": 7,
+    "event_type": "job_created",
+    "message": "Job was queued",
+    "created_at": "2026-05-29T02:40:00.000000+00:00"
+  },
+  {
+    "event_id": 2,
+    "job_id": 7,
+    "event_type": "job_started",
+    "message": "Worker MacBook-Pro-231-a1b2c3d4 started attempt 1",
+    "created_at": "2026-05-29T02:40:01.000000+00:00"
+  },
+  {
+    "event_id": 3,
+    "job_id": 7,
+    "event_type": "job_retrying",
+    "message": "simulated first-attempt failure",
+    "created_at": "2026-05-29T02:40:01.100000+00:00"
+  }
+]
+```
 
 ## Demo Jobs
 

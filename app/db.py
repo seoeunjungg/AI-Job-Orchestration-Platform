@@ -39,6 +39,18 @@ def init_db():
         """
     )
 
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS job_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id INTEGER NOT NULL,
+            event_type TEXT NOT NULL,
+            message TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+
     ensure_column(db, "jobs", "attempts", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(db, "jobs", "max_attempts", "INTEGER NOT NULL DEFAULT 3")
     ensure_column(db, "jobs", "started_at", "TEXT")
