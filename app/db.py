@@ -27,6 +27,18 @@ def init_db():
         """
     )
 
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS workers (
+            id TEXT PRIMARY KEY,
+            status TEXT NOT NULL,
+            current_job_id INTEGER,
+            started_at TEXT NOT NULL,
+            last_seen_at TEXT NOT NULL
+        )
+        """
+    )
+
     ensure_column(db, "jobs", "attempts", "INTEGER NOT NULL DEFAULT 0")
     ensure_column(db, "jobs", "max_attempts", "INTEGER NOT NULL DEFAULT 3")
     ensure_column(db, "jobs", "started_at", "TEXT")

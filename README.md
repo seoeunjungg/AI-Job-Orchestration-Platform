@@ -19,6 +19,7 @@ The current version focuses on the orchestration core:
 - Retry tracking with configurable `max_attempts`
 - Runtime timing with `started_at`, `finished_at`, and `duration_seconds`
 - Reliability metrics endpoint
+- Worker heartbeat monitoring
 - Swagger docs at `/docs`
 - Supported v0 job types: `echo`, `sleep`, `fail_once`
 
@@ -127,6 +128,30 @@ Example response:
 }
 ```
 
+### Worker Health
+
+```text
+GET /workers
+```
+
+Example response:
+
+```json
+[
+  {
+    "worker_id": "MacBook-Pro-231-a1b2c3d4",
+    "status": "idle",
+    "current_job_id": null,
+    "started_at": "2026-05-29T02:30:00.000000+00:00",
+    "last_seen_at": "2026-05-29T02:30:06.000000+00:00",
+    "seconds_since_last_seen": 1.2041,
+    "healthy": true
+  }
+]
+```
+
+Workers update their heartbeat while idle and while processing jobs. The API marks a worker unhealthy if it has not been seen recently.
+
 ## Demo Jobs
 
 ```json
@@ -199,7 +224,6 @@ worker/
 ## Next Planned Improvements
 
 - Multiple worker safety
-- Worker heartbeat tracking
 - PostgreSQL/Redis version
 - Simple dashboard
 - Real AI workloads such as summarization, OCR, embeddings, or image processing

@@ -14,6 +14,7 @@ from app.schemas import (
     JobDetailResponse,
     JobListItem,
     MetricsResponse,
+    WorkerHealthResponse,
 )
 from worker.handlers import HANDLERS
 
@@ -191,6 +192,39 @@ def get_metrics():
         "failed_after_retries": failed_after_retries,
         "average_duration_seconds": round(sum(durations) / len(durations), 4) if durations else None,
     }
+
+
+@app.get("/workers", response_model=list[WorkerHealthResponse])
+def list_workers():
+    db = sqlite3.connect(DB_PATH)
+    rows = db.execute(
+        """
+        SELECT id, status, current_job_id, started_at, last_seen_at
+        FROM workers
+        ORDER BY last_seen_at DESC
+        """
+    ).fetchall()
+    db.close()
+
+    now = datetime.now(timezone.utc)
+    workers = []
+    for worker_id, status, current_job_id, started_at, last_seen_at in rows:
+        last_seen = datetime.fromisoformat(last_seen_at)
+        seconds_since_last_seen = round((now - last_seen).total_seconds(), 4)
+
+        workers.append(
+            {
+                "worker_id": worker_id,
+                "status": status,
+                "current_job_id": current_job_id,
+                "started_at": started_at,
+                "last_seen_at": last_seen_at,
+                "seconds_since_last_seen": seconds_since_last_seen,
+                "healthy": seconds_since_last_seen < 10,
+            }
+        )
+
+    return workers
 
 
 def count_status(rows, status: str):

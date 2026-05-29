@@ -1,8 +1,10 @@
 # worker.py: Worker polls database -> finds queued job -> runs handler -> updates database
 
 import json
+import socket
 import sqlite3
 import time
+import uuid
 from datetime import datetime, timezone
 
 from app.db import DB_PATH
@@ -11,10 +13,43 @@ from worker.handlers import HANDLERS
 
 
 POLL_INTERVAL_SECONDS = 2
+WORKER_ID = f"{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
 
 
 def utc_now():
     return datetime.now(timezone.utc).isoformat()
+
+
+def register_worker():
+    now = utc_now()
+    db = sqlite3.connect(DB_PATH)
+    db.execute(
+        """
+        INSERT INTO workers (id, status, current_job_id, started_at, last_seen_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            status = excluded.status,
+            current_job_id = excluded.current_job_id,
+            last_seen_at = excluded.last_seen_at
+        """,
+        (WORKER_ID, "idle", None, now, now),
+    )
+    db.commit()
+    db.close()
+
+
+def heartbeat(status: str = "idle", current_job_id: int | None = None):
+    db = sqlite3.connect(DB_PATH)
+    db.execute(
+        """
+        UPDATE workers
+        SET status = ?, current_job_id = ?, last_seen_at = ?
+        WHERE id = ?
+        """,
+        (status, current_job_id, utc_now(), WORKER_ID),
+    )
+    db.commit()
+    db.close()
 
 
 def get_next_queued_job():
@@ -141,9 +176,11 @@ def run_job(row):
 
 
 def main():
-    print("Worker started. Waiting for queued jobs...")
+    register_worker()
+    print(f"Worker {WORKER_ID} started. Waiting for queued jobs...")
 
     while True:
+        heartbeat()
         job = get_next_queued_job()
 
         if job is None:
@@ -151,7 +188,9 @@ def main():
             continue
 
         print(f"Processing job {job[0]} ({job[1]})")
+        heartbeat("running", job[0])
         run_job(job)
+        heartbeat()
 
 
 if __name__ == "__main__":

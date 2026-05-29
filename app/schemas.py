@@ -55,3 +55,13 @@ class MetricsResponse(BaseModel):
     success_rate: float
     failed_after_retries: int
     average_duration_seconds: float | None
+
+
+class WorkerHealthResponse(BaseModel):
+    worker_id: str
+    status: str
+    current_job_id: int | None
+    started_at: str
+    last_seen_at: str
+    seconds_since_last_seen: float
+    healthy: bool
