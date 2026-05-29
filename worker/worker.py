@@ -21,7 +21,7 @@ def get_next_queued_job():
     db = sqlite3.connect(DB_PATH)
     row = db.execute(
         """
-        SELECT id, job_type, payload
+        SELECT id, job_type, payload, attempts, max_attempts
         FROM jobs
         WHERE status = ?
         ORDER BY id ASC
@@ -34,17 +34,37 @@ def get_next_queued_job():
     return row
 
 
-def update_job_status(job_id: int, status: str, result=None, error=None):
+def mark_running(job_id: int, attempts: int):
     db = sqlite3.connect(DB_PATH)
     db.execute(
         """
         UPDATE jobs
-        SET status = ?, result = ?, error = ?, updated_at = ?
+        SET status = ?, attempts = ?, error = ?, started_at = COALESCE(started_at, ?), updated_at = ?
         WHERE id = ?
         """,
         (
-            status,
-            json.dumps(result) if result is not None else None,
+            STATUS_RUNNING,
+            attempts,
+            None,
+            utc_now(),
+            utc_now(),
+            job_id,
+        ),
+    )
+    db.commit()
+    db.close()
+
+
+def mark_retry(job_id: int, error: str):
+    db = sqlite3.connect(DB_PATH)
+    db.execute(
+        """
+        UPDATE jobs
+        SET status = ?, error = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            STATUS_QUEUED,
             error,
             utc_now(),
             job_id,
@@ -54,24 +74,70 @@ def update_job_status(job_id: int, status: str, result=None, error=None):
     db.close()
 
 
+def mark_succeeded(job_id: int, result):
+    db = sqlite3.connect(DB_PATH)
+    db.execute(
+        """
+        UPDATE jobs
+        SET status = ?, result = ?, error = ?, finished_at = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            STATUS_SUCCEEDED,
+            json.dumps(result),
+            None,
+            utc_now(),
+            utc_now(),
+            job_id,
+        ),
+    )
+    db.commit()
+    db.close()
+
+
+def mark_failed(job_id: int, error: str):
+    db = sqlite3.connect(DB_PATH)
+    db.execute(
+        """
+        UPDATE jobs
+        SET status = ?, error = ?, finished_at = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            STATUS_FAILED,
+            error,
+            utc_now(),
+            utc_now(),
+            job_id,
+        ),
+    )
+    db.commit()
+    db.close()
+
+
 def run_job(row):
-    job_id, job_type, payload_json = row
+    job_id, job_type, payload_json, attempts, max_attempts = row
     payload = json.loads(payload_json)
+    next_attempt = attempts + 1
 
     handler = HANDLERS.get(job_type)
     if handler is None:
-        update_job_status(job_id, STATUS_FAILED, error=f"Unsupported job type: {job_type}")
+        mark_failed(job_id, f"Unsupported job type: {job_type}")
         return
 
-    update_job_status(job_id, STATUS_RUNNING)
+    mark_running(job_id, next_attempt)
 
     try:
-        result = handler(payload)
+        handler_payload = {**payload, "_attempt": next_attempt}
+        result = handler(handler_payload)
     except Exception as exc:
-        update_job_status(job_id, STATUS_FAILED, error=str(exc))
+        if next_attempt < max_attempts:
+            mark_retry(job_id, str(exc))
+        else:
+            mark_failed(job_id, str(exc))
         return
 
-    update_job_status(job_id, STATUS_SUCCEEDED, result=result)
+    mark_succeeded(job_id, result)
 
 
 def main():

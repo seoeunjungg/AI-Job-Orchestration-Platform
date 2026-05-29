@@ -16,13 +16,17 @@ The current version focuses on the orchestration core:
 - SQLite job store
 - Background worker process
 - Job lifecycle tracking
+- Retry tracking with configurable `max_attempts`
+- Runtime timing with `started_at`, `finished_at`, and `duration_seconds`
+- Reliability metrics endpoint
 - Swagger docs at `/docs`
-- Supported v0 job types: `echo`, `sleep`
+- Supported v0 job types: `echo`, `sleep`, `fail_once`
 
 ## Job Lifecycle
 
 ```text
 queued -> running -> succeeded
+queued -> running -> queued -> running -> succeeded
 queued -> running -> failed
 ```
 
@@ -45,6 +49,7 @@ Example request:
 ```json
 {
   "job_type": "echo",
+  "max_attempts": 3,
   "payload": {
     "message": "hello"
   }
@@ -58,6 +63,7 @@ Example response:
   "job_id": 1,
   "status": "queued",
   "job_type": "echo",
+  "max_attempts": 3,
   "payload": {
     "message": "hello"
   }
@@ -90,10 +96,58 @@ Example response after the worker completes an `echo` job:
     "message": "hello"
   },
   "error": null,
+  "attempts": 1,
+  "max_attempts": 3,
   "created_at": "2026-05-29T01:58:42.777684+00:00",
-  "updated_at": "2026-05-29T01:59:13.601906+00:00"
+  "updated_at": "2026-05-29T01:59:13.601906+00:00",
+  "started_at": "2026-05-29T01:59:13.599361+00:00",
+  "finished_at": "2026-05-29T01:59:13.601906+00:00",
+  "duration_seconds": 0.0025
 }
 ```
+
+### Reliability Metrics
+
+```text
+GET /metrics
+```
+
+Example response:
+
+```json
+{
+  "total_jobs": 10,
+  "queued_jobs": 0,
+  "running_jobs": 0,
+  "succeeded_jobs": 9,
+  "failed_jobs": 1,
+  "success_rate": 0.9,
+  "failed_after_retries": 1,
+  "average_duration_seconds": 0.2541
+}
+```
+
+## Demo Jobs
+
+```json
+{
+  "job_type": "sleep",
+  "max_attempts": 3,
+  "payload": {
+    "seconds": 3
+  }
+}
+```
+
+```json
+{
+  "job_type": "fail_once",
+  "max_attempts": 3,
+  "payload": {}
+}
+```
+
+`fail_once` intentionally fails on the first attempt and succeeds on retry, which demonstrates retry behavior.
 
 ## Run Locally
 
@@ -144,9 +198,9 @@ worker/
 
 ## Next Planned Improvements
 
-- Retry support
 - Multiple worker safety
 - Worker heartbeat tracking
 - PostgreSQL/Redis version
 - Simple dashboard
 - Real AI workloads such as summarization, OCR, embeddings, or image processing
+- Kubernetes deployment and autoscaling

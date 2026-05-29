@@ -8,7 +8,13 @@ from fastapi import FastAPI, HTTPException
 
 from app.db import DB_PATH, init_db
 from app.models import STATUS_QUEUED
-from app.schemas import JobCreateRequest, JobCreateResponse, JobDetailResponse, JobListItem
+from app.schemas import (
+    JobCreateRequest,
+    JobCreateResponse,
+    JobDetailResponse,
+    JobListItem,
+    MetricsResponse,
+)
 from worker.handlers import HANDLERS
 
 app = FastAPI(title="Distributed AI Job Orchestration Platform")
@@ -37,10 +43,14 @@ def create_job(job: JobCreateRequest):
             status,
             result,
             error,
+            attempts,
+            max_attempts,
             created_at,
-            updated_at
+            updated_at,
+            started_at,
+            finished_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             job.job_type,
@@ -48,8 +58,12 @@ def create_job(job: JobCreateRequest):
             STATUS_QUEUED,
             None,
             None,
+            0,
+            job.max_attempts,
             now,
             now,
+            None,
+            None,
         ),
     )
 
@@ -62,6 +76,7 @@ def create_job(job: JobCreateRequest):
         "status": STATUS_QUEUED,
         "job_type": job.job_type,
         "payload": job.payload,
+        "max_attempts": job.max_attempts,
     }
 
 
@@ -70,7 +85,7 @@ def list_jobs():
     db = sqlite3.connect(DB_PATH)
     rows = db.execute(
         """
-        SELECT id, job_type, status, error, created_at, updated_at
+        SELECT id, job_type, status, attempts, max_attempts, error, created_at, updated_at
         FROM jobs
         ORDER BY id DESC
         LIMIT 50
@@ -83,9 +98,11 @@ def list_jobs():
             "job_id": row[0],
             "job_type": row[1],
             "status": row[2],
-            "error": row[3],
-            "created_at": row[4],
-            "updated_at": row[5],
+            "attempts": row[3],
+            "max_attempts": row[4],
+            "error": row[5],
+            "created_at": row[6],
+            "updated_at": row[7],
         }
         for row in rows
     ]
@@ -96,7 +113,19 @@ def get_job(job_id: int):
     db = sqlite3.connect(DB_PATH)
     row = db.execute(
         """
-        SELECT id, job_type, payload, status, result, error, created_at, updated_at
+        SELECT
+            id,
+            job_type,
+            payload,
+            status,
+            result,
+            error,
+            attempts,
+            max_attempts,
+            created_at,
+            updated_at,
+            started_at,
+            finished_at
         FROM jobs
         WHERE id = ?
         """,
@@ -114,6 +143,64 @@ def get_job(job_id: int):
         "status": row[3],
         "result": json.loads(row[4]) if row[4] else None,
         "error": row[5],
-        "created_at": row[6],
-        "updated_at": row[7],
+        "attempts": row[6],
+        "max_attempts": row[7],
+        "created_at": row[8],
+        "updated_at": row[9],
+        "started_at": row[10],
+        "finished_at": row[11],
+        "duration_seconds": calculate_duration_seconds(row[10], row[11]),
     }
+
+
+@app.get("/metrics", response_model=MetricsResponse)
+def get_metrics():
+    db = sqlite3.connect(DB_PATH)
+    rows = db.execute(
+        """
+        SELECT status, attempts, max_attempts, started_at, finished_at
+        FROM jobs
+        """
+    ).fetchall()
+    db.close()
+
+    total_jobs = len(rows)
+    queued_jobs = count_status(rows, "queued")
+    running_jobs = count_status(rows, "running")
+    succeeded_jobs = count_status(rows, "succeeded")
+    failed_jobs = count_status(rows, "failed")
+    completed_jobs = succeeded_jobs + failed_jobs
+    failed_after_retries = sum(
+        1 for status, attempts, max_attempts, _, _ in rows
+        if status == "failed" and attempts >= max_attempts
+    )
+
+    durations = [
+        duration
+        for _, _, _, started_at, finished_at in rows
+        if (duration := calculate_duration_seconds(started_at, finished_at)) is not None
+    ]
+
+    return {
+        "total_jobs": total_jobs,
+        "queued_jobs": queued_jobs,
+        "running_jobs": running_jobs,
+        "succeeded_jobs": succeeded_jobs,
+        "failed_jobs": failed_jobs,
+        "success_rate": round(succeeded_jobs / completed_jobs, 4) if completed_jobs else 0,
+        "failed_after_retries": failed_after_retries,
+        "average_duration_seconds": round(sum(durations) / len(durations), 4) if durations else None,
+    }
+
+
+def count_status(rows, status: str):
+    return sum(1 for row in rows if row[0] == status)
+
+
+def calculate_duration_seconds(started_at: str | None, finished_at: str | None):
+    if not started_at or not finished_at:
+        return None
+
+    started = datetime.fromisoformat(started_at)
+    finished = datetime.fromisoformat(finished_at)
+    return round((finished - started).total_seconds(), 4)

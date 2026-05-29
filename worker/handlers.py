@@ -18,7 +18,20 @@ def run_sleep(payload: dict):
         "message": f"slept for {seconds} seconds"
     }
 
+
+def run_fail_once(payload: dict):
+    attempt = payload.get("_attempt", 1)
+    if attempt == 1:
+        raise RuntimeError("simulated first-attempt failure")
+
+    return {
+        "message": "succeeded after retry",
+        "attempt": attempt,
+    }
+
+
 HANDLERS = {
     "echo": run_echo,
     "sleep": run_sleep,
+    "fail_once": run_fail_once,
 }
