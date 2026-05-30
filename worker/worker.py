@@ -7,7 +7,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 
-from app.db import DB_PATH
+from app.db import DB_PATH, init_db
 from app.events import record_job_event
 from app.models import STATUS_FAILED, STATUS_QUEUED, STATUS_RUNNING, STATUS_SUCCEEDED
 from worker.handlers import HANDLERS
@@ -181,6 +181,7 @@ def run_job(row):
 
 
 def main():
+    init_db()
     register_worker()
     print(f"Worker {WORKER_ID} started. Waiting for queued jobs...")
 
