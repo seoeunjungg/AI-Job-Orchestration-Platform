@@ -10,6 +10,26 @@ The current version focuses on the orchestration core:
 4. The worker executes the matching job handler.
 5. The worker stores the result and updates the final status.
 
+## Architecture
+
+```text
+Client / Swagger / curl
+        |
+        v
+FastAPI API
+        |
+        v
+SQLite Job Store
+        ^
+        |
+Python Worker
+        |
+        v
+Job Handlers
+```
+
+The API owns job submission and status reads. The worker owns execution, retries, heartbeat updates, and event logging. SQLite acts as the shared source of truth for jobs, worker health, metrics, and job events.
+
 ## Current Features
 
 - FastAPI job submission API
@@ -242,6 +262,40 @@ Open the Swagger UI:
 http://127.0.0.1:8000/docs
 ```
 
+## Demo Commands
+
+Create a job that intentionally fails once and succeeds on retry:
+
+```bash
+curl -X POST http://127.0.0.1:8000/jobs \
+  -H "Content-Type: application/json" \
+  -d '{"job_type":"fail_once","max_attempts":3,"payload":{}}'
+```
+
+Check the job status:
+
+```bash
+curl http://127.0.0.1:8000/jobs/1
+```
+
+Inspect the job event trail:
+
+```bash
+curl http://127.0.0.1:8000/jobs/1/events
+```
+
+Check worker health:
+
+```bash
+curl http://127.0.0.1:8000/workers
+```
+
+Check reliability metrics:
+
+```bash
+curl http://127.0.0.1:8000/metrics
+```
+
 ## Project Structure
 
 ```text
@@ -255,6 +309,18 @@ worker/
   handlers.py   Supported job type implementations
   worker.py     Polling loop that executes queued jobs
 ```
+
+## Resume Summary
+
+Built an asynchronous AI job orchestration platform with FastAPI, SQLite-backed queueing, Python workers, retry handling, worker heartbeats, per-job event logs, and reliability metrics.
+
+Key systems features:
+
+- job lifecycle tracking
+- retry and failure simulation
+- worker health monitoring
+- per-job event telemetry
+- aggregate success/failure metrics
 
 ## Next Planned Improvements
 
