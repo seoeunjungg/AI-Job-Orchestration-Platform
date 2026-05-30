@@ -1,8 +1,9 @@
 # db.py: database connection and setup
 
+import os
 import sqlite3
 
-DB_PATH = "jobs.db"
+DB_PATH = os.getenv("DB_PATH", "jobs.db")
 
 
 def init_db():

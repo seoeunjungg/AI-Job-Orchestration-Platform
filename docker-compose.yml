@@ -1,0 +1,25 @@
+services:
+  api:
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      DB_PATH: /data/jobs.db
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - job-data:/data
+
+  worker:
+    build: .
+    command: python -m worker.worker
+    environment:
+      DB_PATH: /data/jobs.db
+    depends_on:
+      - api
+    volumes:
+      - .:/app
+      - job-data:/data
+
+volumes:
+  job-data:

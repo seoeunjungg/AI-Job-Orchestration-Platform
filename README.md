@@ -41,6 +41,7 @@ The API owns job submission and status reads. The worker owns execution, retries
 - Reliability metrics endpoint
 - Worker heartbeat monitoring
 - Per-job event logs
+- Docker Compose setup for separate API and worker services
 - Swagger docs at `/docs`
 - Supported v0 job types: `echo`, `sleep`, `fail_once`
 
@@ -296,6 +297,27 @@ Check reliability metrics:
 curl http://127.0.0.1:8000/metrics
 ```
 
+## Run With Docker Compose
+
+Build and start the API and worker services:
+
+```bash
+docker compose up --build
+```
+
+The API will be available at:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+The Compose setup runs two services:
+
+- `api` - FastAPI server
+- `worker` - background worker process
+
+Both services share the same SQLite database through a Docker volume.
+
 ## Project Structure
 
 ```text
@@ -312,7 +334,7 @@ worker/
 
 ## Resume Summary
 
-Built an asynchronous AI job orchestration platform with FastAPI, SQLite-backed queueing, Python workers, retry handling, worker heartbeats, per-job event logs, and reliability metrics.
+Built an asynchronous AI job orchestration platform with FastAPI, SQLite-backed queueing, containerized API/worker services, retry handling, worker heartbeats, per-job event logs, and reliability metrics.
 
 Key systems features:
 
